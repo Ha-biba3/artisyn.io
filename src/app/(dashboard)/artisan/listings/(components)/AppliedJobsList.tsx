@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import bgImg from "../(assets)/bg.png";
+import { useApplications } from "@/lib/hooks";
+import { SkeletonList } from "@/components/ui/skeleton-list";
 
 interface Application {
   id: string;
@@ -15,29 +16,35 @@ interface Application {
 }
 
 const AppliedJobsList = () => {
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, error, refetch } = useApplications();
 
-  useEffect(() => {
-    const fetchApplications = async () => {
-      try {
-        const response = await fetch("/api/applications");
-        if (response.ok) {
-          const data = await response.json();
-          setApplications(data.applications || []);
-        }
-      } catch (error) {
-        console.error("Failed to fetch applications:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const applications: Application[] = (data ?? []).map((app) => ({
+    id: app.id,
+    jobId: app.id,
+    jobTitle: app.jobTitle,
+    company: app.applicant,
+    state: "Applied",
+    appliedAt: app.createdAt,
+    updatedAt: app.createdAt,
+  }));
 
-    fetchApplications();
-  }, []);
+  if (isLoading) {
+    return <SkeletonList className="mt-8" count={3} label="Loading applications" />;
+  }
 
-  if (loading) {
-    return <div className="py-10 text-center text-sm text-gray-500">Loading applications...</div>;
+  if (error) {
+    return (
+      <div className="py-10 text-center text-sm text-gray-500">
+        <p>{error.message}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-3 px-4 py-2 border rounded-md hover:bg-gray-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   if (applications.length === 0) {

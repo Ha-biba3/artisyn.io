@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useJobs } from "@/lib/hooks";
+import { SkeletonList } from "@/components/ui/skeleton-list";
 
 interface CompletedJob {
   id: string;
@@ -15,32 +17,32 @@ interface CompletedJob {
 const LIMIT = 5;
 
 const CompletedJobsList = () => {
-  const [jobs, setJobs] = useState<CompletedJob[]>([]);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, error, refetch } = useJobs<CompletedJob>({
+    page,
+    limit: LIMIT,
+  });
 
-  useEffect(() => {
-    const fetchJobs = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/jobs?page=${page}&limit=${LIMIT}`);
-        if (res.ok) {
-          const data = await res.json();
-          setJobs(data.jobs ?? []);
-          setTotalPages(data.totalPages ?? 1);
-        }
-      } catch (error) {
-        console.error("Failed to fetch completed jobs:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchJobs();
-  }, [page]);
+  const jobs = data?.jobs ?? [];
+  const totalPages = data?.totalPages ?? 1;
 
-  if (loading) {
-    return <div className="py-10 text-center text-sm text-gray-500">Loading completed jobs...</div>;
+  if (isLoading) {
+    return <SkeletonList className="mt-8" count={3} label="Loading completed jobs" />;
+  }
+
+  if (error) {
+    return (
+      <div className="py-10 text-center text-sm text-gray-500">
+        <p>{error.message}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-3 px-4 py-2 border rounded-md hover:bg-gray-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   if (jobs.length === 0) {

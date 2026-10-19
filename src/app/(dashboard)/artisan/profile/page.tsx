@@ -12,6 +12,9 @@ import {
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useProfile, useSaveProfile } from '@/lib/hooks';
+import type { ProfileResponse } from '@/lib/api/profile';
+import { ProfileCompletionWidget } from '@/components/profile/profile-completion-widget';
 
 const skillCategories = [
   'Carpentry',
@@ -58,29 +61,76 @@ interface ProfileData {
   profileImageUrl: string | null;
 }
 
+const defaultProfile: ProfileData = {
+  fullName: 'Samuel Adeyemi',
+  email: 'samuel@example.com',
+  skillCategory: 'Carpentry',
+  state: 'Lagos',
+  city: 'Ikeja',
+  yearsOfExperience: '5-10 years',
+  bio: "I'm a skilled carpenter with over 7 years of experience in custom furniture, cabinetry, and general woodwork. I take pride in delivering quality craftsmanship that meets clients' exact specifications and timelines.",
+  profileImageUrl: null,
+};
+
+const PROFILE_STRING_KEYS = [
+  'fullName',
+  'email',
+  'skillCategory',
+  'state',
+  'city',
+  'yearsOfExperience',
+  'bio',
+] as const;
+
+function mapLoadedProfile(profile: ProfileResponse): Partial<ProfileData> {
+  const mapped: Partial<ProfileData> = {};
+
+  for (const key of PROFILE_STRING_KEYS) {
+    const value = profile[key];
+    if (typeof value === 'string') {
+      mapped[key] = value;
+    }
+  }
+
+  const imageUrl = profile.profileImageUrl;
+  if (typeof imageUrl === 'string' || imageUrl === null) {
+    mapped.profileImageUrl = imageUrl;
+  }
+
+  return mapped;
+}
+
 export default function ArtisanProfilePage() {
   const [_, setProfileImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [overrides, setOverrides] = useState<Partial<ProfileData>>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [formData, setFormData] = useState<ProfileData>({
-    fullName: 'Samuel Adeyemi',
-    email: 'samuel@example.com',
-    skillCategory: 'Carpentry',
-    state: 'Lagos',
-    city: 'Ikeja',
-    yearsOfExperience: '5-10 years',
-    bio: "I'm a skilled carpenter with over 7 years of experience in custom furniture, cabinetry, and general woodwork. I take pride in delivering quality craftsmanship that meets clients' exact specifications and timelines.",
-    profileImageUrl: null,
-  });
+  const { data: profile } = useProfile();
+  const {
+    mutate: saveProfile,
+    isPending: isSaving,
+    error: saveError,
+  } = useSaveProfile();
+
+  const formData: ProfileData = {
+    ...defaultProfile,
+    ...(profile ? mapLoadedProfile(profile) : null),
+    ...overrides,
+  };
+
+  function setField<K extends keyof ProfileData>(
+    key: K,
+    value: ProfileData[K],
+  ) {
+    setOverrides((prev) => ({ ...prev, [key]: value }));
+  }
 
   const mockStats = {
     profileViews: 124,
     rating: 4.5,
     completedJobs: 12,
-    profileCompletion: 80,
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,32 +141,20 @@ export default function ArtisanProfilePage() {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
     setSaveSuccess(false);
-    // Simulate API call
-    setTimeout(() => {
-      setIsSaving(false);
+
+    try {
+      await saveProfile(formData);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    }, 1000);
+    } catch {
+      setSaveSuccess(false);
+    }
   };
 
   const displayImage = previewUrl ?? formData.profileImageUrl;
-
-  const completionItems = [
-    { label: 'Profile photo', done: !!displayImage },
-    { label: 'Full name', done: !!formData.fullName },
-    { label: 'Bio', done: formData.bio.trim().length > 20 },
-    { label: 'Skill category', done: !!formData.skillCategory },
-    { label: 'Location', done: !!formData.state && !!formData.city },
-    { label: 'Experience', done: !!formData.yearsOfExperience },
-  ];
-  const completionScore = Math.round(
-    (completionItems.filter((i) => i.done).length / completionItems.length) *
-      100,
-  );
 
   return (
     <div className="w-full">
@@ -226,9 +264,7 @@ export default function ArtisanProfilePage() {
                   <Input
                     id="fullName"
                     value={formData.fullName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fullName: e.target.value })
-                    }
+                    onChange={(e) => setField('fullName', e.target.value)}
                     placeholder="Your full name"
                     className="h-10 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-[#605DEC]"
                   />
@@ -241,9 +277,7 @@ export default function ArtisanProfilePage() {
                     id="email"
                     type="email"
                     value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
+                    onChange={(e) => setField('email', e.target.value)}
                     placeholder="you@example.com"
                     className="h-10 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-[#605DEC]"
                   />
@@ -256,9 +290,7 @@ export default function ArtisanProfilePage() {
                 </Label>
                 <Select
                   value={formData.skillCategory}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, skillCategory: value })
-                  }
+                  onValueChange={(value) => setField('skillCategory', value)}
                 >
                   <SelectTrigger className="h-10 focus:ring-0 focus:ring-offset-0 focus:border-[#605DEC]">
                     <SelectValue placeholder="Choose a skill/category" />
@@ -284,7 +316,7 @@ export default function ArtisanProfilePage() {
                 <Select
                   value={formData.yearsOfExperience}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, yearsOfExperience: value })
+                    setField('yearsOfExperience', value)
                   }
                 >
                   <SelectTrigger className="h-10 focus:ring-0 focus:ring-offset-0 focus:border-[#605DEC]">
@@ -317,9 +349,7 @@ export default function ArtisanProfilePage() {
                   <Label className="text-sm text-gray-700">State</Label>
                   <Select
                     value={formData.state}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, state: value })
-                    }
+                    onValueChange={(value) => setField('state', value)}
                   >
                     <SelectTrigger className="h-10 focus:ring-0 focus:ring-offset-0 focus:border-[#605DEC]">
                       <SelectValue placeholder="Choose State" />
@@ -344,9 +374,7 @@ export default function ArtisanProfilePage() {
                   <Input
                     id="city"
                     value={formData.city}
-                    onChange={(e) =>
-                      setFormData({ ...formData, city: e.target.value })
-                    }
+                    onChange={(e) => setField('city', e.target.value)}
                     placeholder="Enter your city"
                     className="h-10 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-[#605DEC]"
                   />
@@ -369,9 +397,7 @@ export default function ArtisanProfilePage() {
               <textarea
                 id="bio"
                 value={formData.bio}
-                onChange={(e) =>
-                  setFormData({ ...formData, bio: e.target.value })
-                }
+                onChange={(e) => setField('bio', e.target.value)}
                 placeholder="Describe your skills, experience, and the type of work you do."
                 rows={5}
                 className="w-full resize-none p-3 border border-gray-200 rounded-lg text-sm hover:border-[#6366f1] focus:border-[#605DEC] focus:outline-none focus:ring-0 transition-colors"
@@ -429,56 +455,18 @@ export default function ArtisanProfilePage() {
                 Profile updated successfully.
               </p>
             )}
+            {saveError && (
+              <p className="text-sm text-red-600 font-medium">
+                {saveError.message}
+              </p>
+            )}
           </div>
         </form>
 
         {/* Right Column */}
         <div className="space-y-6">
           {/* Profile Completion */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div className="p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Profile Completion
-              </h2>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-600">Progress</span>
-                <span className="text-sm font-semibold text-[#605DEC]">
-                  {completionScore}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div
-                  className="bg-[#605DEC] h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${completionScore}%` }}
-                />
-              </div>
-              <ul className="space-y-2 mt-2">
-                {completionItems.map((item) => (
-                  <li
-                    key={item.label}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <span
-                      className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        item.done
-                          ? 'bg-green-100 text-green-600'
-                          : 'bg-gray-100 text-gray-400'
-                      }`}
-                    >
-                      {item.done ? '✓' : '○'}
-                    </span>
-                    <span
-                      className={item.done ? 'text-gray-700' : 'text-gray-400'}
-                    >
-                      {item.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          <ProfileCompletionWidget />
 
           {/* Profile Visibility Stats */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
